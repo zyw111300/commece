@@ -9,6 +9,11 @@ from ..repositories.product_repository import ProductRepository
 from ..repositories.order_repository import OrderRepository
 from ..models import Order, OrderItem
 from ..utils.order_utils import OrderNumberGenerator
+from ..exceptions import (
+    InsufficientStockException,
+    ProductNotActiveException,
+    ConcurrentUpdateException
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -93,33 +98,21 @@ class OrderService:
             # 获取商品并加锁
             product = self.product_repo.get_with_lock(product_id)
             if not product:
-                # 商品不存在，创建失败记录
-                self.order_repo.create_order_item(
-                    order, None, quantity, 0, 'failed', '商品不存在或已下架'
-                )
-                return {
-                    'success': False,
-                    'product_id': product_id,
-                    'quantity': quantity,
-                    'error_message': '商品不存在或已下架'
-                }
+                # 抛出商品未激活异常
+                raise ProductNotActiveException(f"商品ID: {product_id}")
+
+            # 检查商品状态
+            if product.status != 'active':
+                raise ProductNotActiveException(product.name)
 
             # 检查库存
             if product.stock_quantity < quantity:
-                # 库存不足，创建失败记录
-                order_item = self.order_repo.create_order_item(
-                    order, product, quantity, product.price, 'failed',
-                    f'库存不足，当前库存：{product.stock_quantity}，需要：{quantity}'
+                # 抛出库存不足异常
+                raise InsufficientStockException(
+                    product.name,
+                    product.stock_quantity,
+                    quantity
                 )
-
-                return {
-                    'success': False,
-                    'product_id': product_id,
-                    'product_name': product.name,
-                    'quantity': quantity,
-                    'error_message': f'库存不足，当前库存：{product.stock_quantity}，需要：{quantity}',
-                    'order_item_id': order_item.id
-                }
 
             # 扣减库存
             stock_updated = self.product_repo.update_stock(
@@ -143,6 +136,53 @@ class OrderService:
                 'unit_price': str(product.price),
                 'total_price': str(total_price),
                 'order_item_id': order_item.id
+            }
+
+        except InsufficientStockException as e:
+            logger.warning(f"库存不足: {e}")
+            # 创建失败记录
+            product = self.product_repo.get_by_id(product_id)
+            if product:
+                order_item = self.order_repo.create_order_item(
+                    order, product, quantity, product.price, 'failed', str(e)
+                )
+                return {
+                    'success': False,
+                    'product_id': product_id,
+                    'product_name': e.product_name,
+                    'quantity': quantity,
+                    'error_message': e.message,
+                    'order_item_id': order_item.id,
+                    'available_stock': e.available_stock,
+                    'required_stock': e.required_stock
+                }
+            return {
+                'success': False,
+                'product_id': product_id,
+                'quantity': quantity,
+                'error_message': e.message
+            }
+
+        except ProductNotActiveException as e:
+            logger.warning(f"商品未激活: {e}")
+            # 创建失败记录
+            self.order_repo.create_order_item(
+                order, None, quantity, 0, 'failed', str(e)
+            )
+            return {
+                'success': False,
+                'product_id': product_id,
+                'quantity': quantity,
+                'error_message': e.message
+            }
+
+        except ConcurrentUpdateException as e:
+            logger.error(f"并发更新异常: {e}")
+            return {
+                'success': False,
+                'product_id': product_id,
+                'quantity': quantity,
+                'error_message': e.message
             }
 
         except Exception as e:

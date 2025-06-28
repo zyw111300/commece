@@ -4,10 +4,16 @@
 """
 
 from typing import List, Optional, Dict, Any
-from django.db.models import Q, QuerySet
+from django.db.models import Q, QuerySet, F
 from django.core.paginator import Paginator
+from django.db import transaction
 from ..models import Product, StockLog
 from ..utils.cache_manager import cache_manager
+from ..exceptions import (
+    InsufficientStockException,
+    ProductNotActiveException,
+    ConcurrentUpdateException
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,39 +39,6 @@ class ProductRepository:
                 return None
 
         return self.cache.get_or_set(cache_key, _get_product, timeout=3600)
-
-    def get_active_products(self, page: int = 1, size: int = 20) -> Dict[str, Any]:
-        """获取活跃商品列表"""
-        cache_key = f"product:list:{page}:{size}"
-
-        def _get_products():
-            try:
-                queryset = Product.objects.filter(status='active').order_by('-created_at')
-                paginator = Paginator(queryset, size)
-                page_obj = paginator.get_page(page)
-
-                return {
-                    'products': list(page_obj),
-                    'total': paginator.count,
-                    'page': page,
-                    'size': size,
-                    'total_pages': paginator.num_pages,
-                    'has_next': page_obj.has_next(),
-                    'has_previous': page_obj.has_previous(),
-                }
-            except Exception as e:
-                logger.error(f"Get active products error: {e}")
-                return {
-                    'products': [],
-                    'total': 0,
-                    'page': page,
-                    'size': size,
-                    'total_pages': 0,
-                    'has_next': False,
-                    'has_previous': False,
-                }
-
-        return self.cache.get_or_set(cache_key, _get_products, timeout=600)
 
     def search_products(self, keyword: str, page: int = 1, size: int = 20) -> Dict[str, Any]:
         """搜索商品"""
@@ -117,6 +90,7 @@ class ProductRepository:
             return None
 
     # 使用事务来确保库存更新的原子性
+    @transaction.atomic
     def update_stock(self, product: Product, quantity_change: int, reason: str = "") -> bool:
         """更新库存"""
         try:

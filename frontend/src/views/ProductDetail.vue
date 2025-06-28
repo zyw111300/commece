@@ -100,18 +100,30 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="quantity_change" label="变更数量" width="100">
+              <el-table-column prop="change_quantity" label="变更数量" width="100">
                 <template #default="{ row }">
                   <span :style="{ color: row.change_type === 'increase' ? '#67c23a' : '#f56c6c' }">
-                    {{ row.change_type === 'increase' ? '+' : '-' }}{{ Math.abs(row.quantity_change) }}
+                    {{ row.change_type === 'increase' ? '+' : '-' }}{{ Math.abs(row.change_quantity) }}
                   </span>
                 </template>
               </el-table-column>
-              <el-table-column prop="stock_after" label="变更后库存" width="120" />
-              <el-table-column prop="reason" label="变更原因" min-width="150" />
-              <el-table-column prop="order_id" label="关联订单" width="100">
+              <el-table-column prop="quantity_after" label="变更后库存" width="120">
                 <template #default="{ row }">
-                  {{ row.order_id || '无' }}
+                  {{ row.quantity_after }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="reason" label="变更原因" min-width="150">
+                <template #default="{ row }">
+                  {{ row.reason ? row.reason.replace(/\s*-\s*ORD[0-9A-Z]+$/, '') : '' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="order_id" label="关联订单" min-width="180">
+                <template #default="{ row }">
+                  <span style="word-break: break-all;">{{
+                    row.order_id
+                      ? row.order_id
+                      : (row.reason && row.reason.match(/ORD[0-9A-Z]+/) ? row.reason.match(/ORD[0-9A-Z]+/)[0] : '无')
+                  }}</span>
                 </template>
               </el-table-column>
               <el-table-column prop="created_at" label="创建时间" width="180">
@@ -202,15 +214,13 @@ export default {
         }
         const response = await productAPI.getProductStockLogs(route.params.id, params)
         // 兼容后端返回格式，确保为数组
-        let logs = response.data.results
-        if (!Array.isArray(logs)) {
-          if (Array.isArray(response.data.data)) {
-            logs = response.data.data
-          } else if (response.data.data && Array.isArray(response.data.data.products)) {
-            logs = response.data.data.products
-          } else {
-            logs = []
-          }
+        let logs = []
+        if (response.data.results && Array.isArray(response.data.results.data)) {
+          logs = response.data.results.data
+        } else if (Array.isArray(response.data.data)) {
+          logs = response.data.data
+        } else {
+          logs = []
         }
         stockLogs.value = logs
         stockLogsPagination.total = response.data.count || 0

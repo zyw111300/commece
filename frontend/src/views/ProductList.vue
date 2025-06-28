@@ -152,8 +152,20 @@ export default {
           response = await productAPI.getProductList(params)
         }
         
-        productList.value = response.data.results || []
-        pagination.total = response.data.count || 0
+        // 兼容后端返回结构：results.data 为数组
+        if (response.data && response.data.results && Array.isArray(response.data.results.data)) {
+          productList.value = response.data.results.data
+          pagination.total = response.data.count || response.data.results.data.length || 0
+        } else if (Array.isArray(response.data.results)) {
+          productList.value = response.data.results
+          pagination.total = response.data.count || response.data.results.length || 0
+        } else if (Array.isArray(response.data)) {
+          productList.value = response.data
+          pagination.total = response.data.length || 0
+        } else {
+          productList.value = []
+          pagination.total = 0
+        }
       } catch (error) {
         console.error('获取商品列表失败:', error)
         ElMessage.error('获取商品列表失败')

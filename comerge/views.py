@@ -12,6 +12,12 @@ from .serializer import (
 )
 from .business.product_service import ProductService
 from .business.order_service import OrderService
+from .exceptions import (
+    BusinessException,
+    InsufficientStockException,
+    ProductNotActiveException,
+    ConcurrentUpdateException
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -84,6 +90,12 @@ class ProductViewSet(viewsets.ModelViewSet):
                 }
             })
 
+        except ProductNotActiveException as e:
+            return Response({
+                'code': 404,
+                'message': e.message,
+                'code_type': e.code
+            }, status=status.HTTP_404_NOT_FOUND)
         except ValueError as e:
             return Response({
                 'code': 400,
@@ -124,6 +136,12 @@ class ProductViewSet(viewsets.ModelViewSet):
                 'data': serializer.data
             })
 
+        except ProductNotActiveException as e:
+            return Response({
+                'code': 404,
+                'message': e.message,
+                'code_type': e.code
+            }, status=status.HTTP_404_NOT_FOUND)
         except ValueError as e:
             return Response({
                 'code': 400,
@@ -178,6 +196,27 @@ class OrderViewSet(viewsets.ModelViewSet):
                 'data': result
             })
 
+        except InsufficientStockException as e:
+            return Response({
+                'code': 400,
+                'message': e.message,
+                'code_type': e.code,
+                'product_name': e.product_name,
+                'available_stock': e.available_stock,
+                'required_stock': e.required_stock
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except ProductNotActiveException as e:
+            return Response({
+                'code': 404,
+                'message': e.message,
+                'code_type': e.code
+            }, status=status.HTTP_404_NOT_FOUND)
+        except ConcurrentUpdateException as e:
+            return Response({
+                'code': 409,
+                'message': e.message,
+                'code_type': e.code
+            }, status=status.HTTP_409_CONFLICT)
         except ValueError as e:
             return Response({
                 'code': 400,
@@ -189,15 +228,3 @@ class OrderViewSet(viewsets.ModelViewSet):
                 'code': 500,
                 'message': '服务器内部错误'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class StockLogViewSet(viewsets.ReadOnlyModelViewSet):
-    """库存日志ViewSet（只读）"""
-    queryset = StockLog.objects.all()
-    serializer_class = StockLogSerializer
-    permission_classes = [AllowAny]
-    pagination_class = CustomPageNumberPagination
-    filter_backends = [DjangoFilterBackend, OrderingFilter]
-    filterset_fields = ['product', 'order', 'change_type']
-    ordering_fields = ['created_at']
-    ordering = ['-created_at']

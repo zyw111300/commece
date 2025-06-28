@@ -8,7 +8,6 @@ app_name = 'comerge'
 router = DefaultRouter()
 router.register(r'products', views.ProductViewSet)
 router.register(r'orders', views.OrderViewSet)
-router.register(r'stock-logs', views.StockLogViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

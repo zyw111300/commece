@@ -193,7 +193,6 @@ export default {
       productLoading.value = true
       try {
         let response
-        
         // 如果有搜索关键词，使用搜索API
         if (productSearch.value && productSearch.value.trim()) {
           const searchParams = {
@@ -210,9 +209,20 @@ export default {
           }
           response = await productAPI.getProductList(params)
         }
-        
-        allProducts.value = response.data.results || []
-        productPagination.total = response.data.count || 0
+        // 兼容后端返回结构：results.data 为数组
+        if (response.data && response.data.results && Array.isArray(response.data.results.data)) {
+          allProducts.value = response.data.results.data
+          productPagination.total = response.data.count || response.data.results.data.length || 0
+        } else if (Array.isArray(response.data.results)) {
+          allProducts.value = response.data.results
+          productPagination.total = response.data.count || response.data.results.length || 0
+        } else if (Array.isArray(response.data)) {
+          allProducts.value = response.data
+          productPagination.total = response.data.length || 0
+        } else {
+          allProducts.value = []
+          productPagination.total = 0
+        }
       } catch (error) {
         console.error('获取商品列表失败:', error)
         ElMessage.error('获取商品列表失败')

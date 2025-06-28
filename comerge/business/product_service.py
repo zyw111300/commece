@@ -6,6 +6,7 @@
 from typing import List, Optional, Dict, Any
 from ..repositories.product_repository import ProductRepository
 from ..models import Product
+from ..exceptions import ProductNotActiveException
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,6 @@ class ProductService:
         # 验证商品是否存在
         product = self.repository.get_by_id(product_id)
         if not product:
-            raise ValueError("商品不存在")
+            raise ProductNotActiveException(f"商品ID: {product_id}")
 
         return self.repository.get_stock_logs(product_id, page, size)
